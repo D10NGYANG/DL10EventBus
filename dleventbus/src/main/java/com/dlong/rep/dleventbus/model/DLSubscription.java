@@ -7,13 +7,13 @@ package com.dlong.rep.dleventbus.model;
  */
 public class DLSubscription {
     /** 订阅类 */
-    final Object subscriber;
+    public final Object subscriber;
     /** 订阅方法 */
-    final DLSubscriberMethod subscriberMethod;
+    public final DLSubscriberMethod subscriberMethod;
     /**
      * 活着的标记
      */
-    volatile boolean active;
+    public volatile boolean active;
 
     public DLSubscription(Object subscriber, DLSubscriberMethod subscriberMethod) {
         this.subscriber = subscriber;

@@ -1,6 +1,9 @@
 package com.dlong.rep.dleventbus;
 
 import com.dlong.rep.dleventbus.exception.DLEventBusException;
+import com.dlong.rep.dleventbus.handler.AsyncEventHandler;
+import com.dlong.rep.dleventbus.handler.IEventHandler;
+import com.dlong.rep.dleventbus.model.DLEventType;
 import com.dlong.rep.dleventbus.model.DLSubscriberMethod;
 import com.dlong.rep.dleventbus.model.DLSubscription;
 import com.dlong.rep.dleventbus.utils.DLSubscriberMethodFinder;
@@ -9,8 +12,10 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.logging.Level;
 
 /**
  * 事件总线
@@ -33,6 +38,17 @@ public class DLEventBus {
     private final Map<Class<?>, CopyOnWriteArrayList<DLSubscription>> subscriptionsByEventType = new HashMap<>();
     /** 每个订阅者带有订阅事件总类 */
     private final Map<Object, List<Class<?>>> typesBySubscriber = new HashMap<>();
+
+    /** 发布事件线程池 */
+    private ThreadLocal<Queue<Class<?>>> mThreadLocalEvents = new ThreadLocal<Queue<Class<?>>>() {
+        @Override
+        protected Queue<Class<?>> initialValue() {
+            return new ConcurrentLinkedQueue<>();
+        }
+    };
+
+    /** 异步发布工具 */
+    private EventDispatcher mEventDispatcher = new EventDispatcher();
 
     /** 得到事件总线实例 */
     public static DLEventBus getDefault() {
@@ -118,8 +134,62 @@ public class DLEventBus {
                 unsubscribeByEventType(subscriber, eventType);
             }
             typesBySubscriber.remove(subscriber);
-        } else {
-            logger.log(Level.WARNING, "Subscriber to unregister was not registered before: " + subscriber.getClass());
+        }
+    }
+
+    /**
+     * 删除某类的监听事件
+     * @param subscriber
+     * @param eventType
+     */
+    private void unsubscribeByEventType(Object subscriber, Class<?> eventType) {
+        List<DLSubscription> subscriptions = subscriptionsByEventType.get(eventType);
+        if (subscriptions != null) {
+            int size = subscriptions.size();
+            for (int i = 0; i < size; i++) {
+                DLSubscription subscription = subscriptions.get(i);
+                if (subscription.subscriber == subscriber) {
+                    subscription.active = false;
+                    subscriptions.remove(i);
+                    i--;
+                    size--;
+                }
+            }
+        }
+    }
+
+    /**
+     * 发布事件消息
+     * @param event 事件
+     */
+    public void post(Object event) {
+        if (event == null) {
+            return;
+        }
+        Objects.requireNonNull(mThreadLocalEvents.get()).offer(event.getClass());
+        mEventDispatcher.dispatchEvents(event);
+    }
+
+    private class EventDispatcher {
+        private IEventHandler mAsyncEventHandler = new AsyncEventHandler();
+
+        void dispatchEvents(Object event) {
+            Queue<Class<?>> eventQueue = mThreadLocalEvents.get();
+            if (null == eventQueue) return;
+            while (eventQueue.size() > 0) {
+                handleEvent(eventQueue.poll(),event);
+            }
+        }
+
+        private void handleEvent(Class<?> cla, Object event) {
+            List<DLSubscription> subscriptions = subscriptionsByEventType.get(cla);
+            if (subscriptions == null) {
+                return;
+            }
+            for (DLSubscription subscription : subscriptions) {
+                IEventHandler eventHandler = mAsyncEventHandler;
+                eventHandler.handleEvent(subscription, event);
+            }
         }
     }
 }
