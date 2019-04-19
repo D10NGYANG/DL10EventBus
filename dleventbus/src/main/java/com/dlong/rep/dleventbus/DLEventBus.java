@@ -3,7 +3,6 @@ package com.dlong.rep.dleventbus;
 import com.dlong.rep.dleventbus.exception.DLEventBusException;
 import com.dlong.rep.dleventbus.handler.AsyncEventHandler;
 import com.dlong.rep.dleventbus.handler.IEventHandler;
-import com.dlong.rep.dleventbus.model.DLEventType;
 import com.dlong.rep.dleventbus.model.DLSubscriberMethod;
 import com.dlong.rep.dleventbus.model.DLSubscription;
 import com.dlong.rep.dleventbus.utils.DLSubscriberMethodFinder;
@@ -167,6 +166,7 @@ public class DLEventBus {
             return;
         }
         Objects.requireNonNull(mThreadLocalEvents.get()).offer(event.getClass());
+        // 分发
         mEventDispatcher.dispatchEvents(event);
     }
 
